@@ -11,7 +11,7 @@ TRADE_URL = "wss://fstream.binance.com/ws/btcusdt@trade"
 SAVE_EVERY_SECONDS = 60  # Save every minute
 LOCAL_SAVE_DIR = "data"
 RCLONE_REMOTE = "gdrive:binance-trades"
-RCLONE_CONFIG = "rclone.conf"
+RCLONE_CONFIG_PATH = "rclone.conf"
 
 buffer = []
 
@@ -26,8 +26,20 @@ def on_message(ws, message):
     except Exception as e:
         print(f"[Error parsing message] {e}")
 
+def write_rclone_config():
+    config = os.environ.get("RCLONE_CONFIG")
+    if not config:
+        print("[Error] RCLONE_CONFIG environment variable not set")
+        return False
+    with open(RCLONE_CONFIG_PATH, "w") as f:
+        f.write(config)
+    return True
+
 def save_and_upload():
     global buffer
+    if not write_rclone_config():
+        return  # Cannot proceed without config
+
     while True:
         time.sleep(SAVE_EVERY_SECONDS)
         if not buffer:
@@ -42,7 +54,7 @@ def save_and_upload():
 
         try:
             subprocess.run([
-                "rclone", "--config", RCLONE_CONFIG, "copy", local_path, RCLONE_REMOTE
+                "rclone", "--config", RCLONE_CONFIG_PATH, "copy", local_path, RCLONE_REMOTE
             ], check=True)
             print(f"[Uploaded] {filename} to Google Drive")
             os.remove(local_path)
