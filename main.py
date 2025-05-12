@@ -9,9 +9,12 @@ from flask import Flask
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from googleapiclient.errors import HttpError
+import random
 
 # === Web Server to keep Render Web Service alive ===
 app = Flask(__name__)
+
 @app.route("/")
 def home():
     return "Binance Trade Collector is running."
@@ -22,6 +25,7 @@ SAVE_EVERY_SECONDS = 60
 LOCAL_SAVE_DIR = "data"
 SERVICE_ACCOUNT_FILE = "service_account.json"
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
+RETRY_LIMIT = 5  # Limit of retries for uploads
 
 buffer = []
 
@@ -29,10 +33,19 @@ def on_message(ws, message):
     global buffer
     try:
         trade = json.loads(message)
-        price = float(trade['p'])
-        qty = float(trade['q'])
-        ts = int(trade['T'])
-        buffer.append([ts, price, qty])
+        
+        # Extracting all necessary fields
+        timestamp = int(trade['T'])  # Timestamp when the trade occurred
+        symbol = trade['s']  # Symbol (e.g., BTCUSDT)
+        price = float(trade['p'])  # Price at which trade occurred
+        qty = float(trade['q'])  # Quantity of asset traded
+        buyer_order_id = int(trade['b'])  # Buyer order ID
+        seller_order_id = int(trade['a'])  # Seller order ID
+        market_maker = trade['m']  # Whether the buyer is a market maker (True/False)
+
+        # Append the data to buffer in a structured format
+        buffer.append([timestamp, symbol, price, qty, buyer_order_id, seller_order_id, market_maker])
+    
     except Exception as e:
         print(f"[Error parsing message] {e}")
 
@@ -44,13 +57,22 @@ def upload_to_gdrive(filename, local_path):
     file_metadata = {'name': filename}
     media = MediaFileUpload(local_path, mimetype='application/octet-stream')
 
-    uploaded_file = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields='id'
-    ).execute()
+    retry_count = 0
+    while retry_count < RETRY_LIMIT:
+        try:
+            uploaded_file = service.files().create(
+                body=file_metadata,
+                media_body=media,
+                fields='id'
+            ).execute()
 
-    print(f"[Uploaded] {filename} to Google Drive with ID: {uploaded_file.get('id')}")
+            print(f"[Uploaded] {filename} to Google Drive with ID: {uploaded_file.get('id')}")
+            return
+        except HttpError as e:
+            print(f"[Upload Error] {e}")
+            retry_count += 1
+            time.sleep(random.randint(1, 3))  # Random delay before retry
+    print(f"[Failed to Upload] {filename} after {RETRY_LIMIT} retries")
 
 def save_and_upload():
     global buffer
@@ -69,11 +91,16 @@ def save_and_upload():
             upload_to_gdrive(filename, local_path)
             os.remove(local_path)
         except Exception as e:
-            print(f"[Upload Error] {e}")
+            print(f"[Error in save_and_upload] {e}")
 
 def start_ws():
-    ws = websocket.WebSocketApp(TRADE_URL, on_message=on_message)
-    ws.run_forever()
+    while True:
+        try:
+            ws = websocket.WebSocketApp(TRADE_URL, on_message=on_message)
+            ws.run_forever()
+        except Exception as e:
+            print(f"[WebSocket Error] {e}, Reconnecting in 5 seconds...")
+            time.sleep(5)
 
 if __name__ == "__main__":
     os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
