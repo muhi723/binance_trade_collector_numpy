@@ -33,17 +33,16 @@ def on_message(ws, message):
     global buffer
     try:
         trade = json.loads(message)
-        
-        # Extracting all necessary fields
-        timestamp = int(trade['T'])  # Timestamp when the trade occurred
-        symbol = trade['s']  # Symbol (e.g., BTCUSDT)
-        price = float(trade['p'])  # Price at which trade occurred
-        qty = float(trade['q'])  # Quantity of asset traded
-        buyer_order_id = int(trade['b'])  # Buyer order ID
-        seller_order_id = int(trade['a'])  # Seller order ID
-        market_maker = trade['m']  # Whether the buyer is a market maker (True/False)
 
-        # Append the data to buffer in a structured format
+        # Extracting all necessary fields safely
+        timestamp = int(trade.get('T', 0))  # Trade time
+        symbol = trade.get('s', 'UNKNOWN')  # Symbol
+        price = float(trade.get('p', 0.0))  # Price
+        qty = float(trade.get('q', 0.0))    # Quantity
+        buyer_order_id = int(trade.get('b', -1))  # Buyer order ID
+        seller_order_id = int(trade.get('a', -1))  # Seller order ID
+        market_maker = trade.get('m', None)  # Market maker flag
+
         buffer.append([timestamp, symbol, price, qty, buyer_order_id, seller_order_id, market_maker])
     
     except Exception as e:
@@ -71,7 +70,7 @@ def upload_to_gdrive(filename, local_path):
         except HttpError as e:
             print(f"[Upload Error] {e}")
             retry_count += 1
-            time.sleep(random.randint(1, 3))  # Random delay before retry
+            time.sleep(random.randint(1, 3))
     print(f"[Failed to Upload] {filename} after {RETRY_LIMIT} retries")
 
 def save_and_upload():
