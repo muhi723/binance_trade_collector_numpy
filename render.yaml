@@ -1,7 +1,8 @@
 services:
-  - type: worker
+  - type: web
     name: binance-trade-collector
     env: python
+    plan: free
     buildCommand: |
       apt-get update && apt-get install -y curl unzip
       curl -O https://downloads.rclone.org/rclone-current-linux-amd64.zip
@@ -9,4 +10,4 @@ services:
       cp rclone-*-linux-amd64/rclone /usr/bin/
       chmod 755 /usr/bin/rclone
       pip install -r requirements.txt
-    startCommand: python test.py
+    startCommand: python main.py
