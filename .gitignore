@@ -1,3 +1,18 @@
-rclone.conf
-__pycache__/
+# Ignore service account file
+service_account.json
+
+# Ignore the directory where trade files are saved
 data/
+
+# Python bytecode files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+
+# Virtual environment folders
+venv/
+.env/
+
+# Render-specific log files
+render.yaml
