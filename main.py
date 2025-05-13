@@ -26,8 +26,10 @@ LOCAL_SAVE_DIR = "data"
 SERVICE_ACCOUNT_FILE = "service_account.json"
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 RETRY_LIMIT = 5  # Limit of retries for uploads
+FOLDER_ID = '160pBqGxFOhcHpiUk_Fyj4bOqE1XyB25j'  # Your Google Drive folder ID
 
 buffer = []
+buffer_lock = threading.Lock()  # Lock for thread-safe access
 
 def on_message(ws, message):
     global buffer
@@ -43,7 +45,8 @@ def on_message(ws, message):
         seller_order_id = int(trade.get('a', -1))  # Seller order ID
         market_maker = trade.get('m', None)  # Market maker flag
 
-        buffer.append([timestamp, symbol, price, qty, buyer_order_id, seller_order_id, market_maker])
+        with buffer_lock:
+            buffer.append([timestamp, symbol, price, qty, buyer_order_id, seller_order_id, market_maker])
     
     except Exception as e:
         print(f"[Error parsing message] {e}")
@@ -53,7 +56,11 @@ def upload_to_gdrive(filename, local_path):
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     service = build('drive', 'v3', credentials=credentials)
 
-    file_metadata = {'name': filename}
+    # Specify the folder where to upload the file
+    file_metadata = {
+        'name': filename,
+        'parents': [FOLDER_ID]  # Set the folder where the file will be uploaded
+    }
     media = MediaFileUpload(local_path, mimetype='application/octet-stream')
 
     retry_count = 0
@@ -77,10 +84,18 @@ def save_and_upload():
     global buffer
     while True:
         time.sleep(SAVE_EVERY_SECONDS)
-        if not buffer:
+        with buffer_lock:
+            if not buffer:
+                continue
+            local_copy = buffer[:]
+            buffer = []
+
+        try:
+            arr = np.array(local_copy)
+        except Exception as e:
+            print(f"[Array Conversion Error] {e}")
             continue
-        arr = np.array(buffer)
-        buffer = []
+
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"trades_{timestamp}.npy"
         local_path = os.path.join(LOCAL_SAVE_DIR, filename)
