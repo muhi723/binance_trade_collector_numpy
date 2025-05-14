@@ -31,6 +31,7 @@ FOLDER_ID = '160pBqGxFOhcHpiUk_Fyj4bOqE1XyB25j'
 buffer = []
 buffer_lock = threading.Lock()
 
+# === WebSocket Handler ===
 def on_message(ws, message):
     try:
         trade = json.loads(message)
@@ -45,10 +46,11 @@ def on_message(ws, message):
 
         with buffer_lock:
             buffer.append([timestamp, symbol, price, qty, buyer_order_id, seller_order_id, market_maker])
-    
+
     except Exception as e:
         print(f"[Error parsing message] {e}")
 
+# === GDrive Upload ===
 def upload_to_gdrive(filename, local_path):
     try:
         with open(SERVICE_ACCOUNT_FILE, "r") as f:
@@ -84,7 +86,9 @@ def upload_to_gdrive(filename, local_path):
     except Exception as e:
         print(f"[Upload Init Error] {e}")
 
+# === Save to Local + Upload Thread ===
 def save_and_upload():
+    print("[Thread] Save + Upload thread started.")
     os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
     while True:
         time.sleep(SAVE_EVERY_SECONDS)
@@ -111,7 +115,9 @@ def save_and_upload():
         except Exception as e:
             print(f"[Error in save_and_upload] {e}")
 
+# === WebSocket Thread ===
 def start_ws():
+    print("[Thread] WebSocket thread started.")
     while True:
         try:
             ws = websocket.WebSocketApp(TRADE_URL, on_message=on_message)
@@ -120,10 +126,14 @@ def start_ws():
             print(f"[WebSocket Error] {e}, Reconnecting in 5 seconds...")
             time.sleep(5)
 
+# === Thread Starter ===
 def start_background_tasks():
+    print("[Main] Starting background threads...")
     threading.Thread(target=save_and_upload, daemon=True).start()
     threading.Thread(target=start_ws, daemon=True).start()
 
+# === Main Entrypoint ===
 if __name__ == "__main__":
     start_background_tasks()
+    print("[Main] Starting Flask app...")
     app.run(host="0.0.0.0", port=10000)
