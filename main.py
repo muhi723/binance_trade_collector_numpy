@@ -123,6 +123,10 @@ def start_ws():
 
 if __name__ == "__main__":
     os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
-    threading.Thread(target=save_and_upload, daemon=True).start()
-    threading.Thread(target=start_ws, daemon=True).start()
+
+    # Start both threads WITHOUT daemon=True
+    threading.Thread(target=save_and_upload).start()
+    threading.Thread(target=start_ws).start()
+
+    # Keep Flask server running to keep service alive on Render
     app.run(host="0.0.0.0", port=10000)
