@@ -32,7 +32,6 @@ buffer = []
 buffer_lock = threading.Lock()
 
 def on_message(ws, message):
-    global buffer
     try:
         trade = json.loads(message)
 
@@ -86,14 +85,14 @@ def upload_to_gdrive(filename, local_path):
         print(f"[Upload Init Error] {e}")
 
 def save_and_upload():
-    global buffer
+    os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
     while True:
         time.sleep(SAVE_EVERY_SECONDS)
         with buffer_lock:
             if not buffer:
                 continue
             local_copy = buffer[:]
-            buffer = []
+            buffer.clear()
 
         try:
             arr = np.array(local_copy)
@@ -121,12 +120,10 @@ def start_ws():
             print(f"[WebSocket Error] {e}, Reconnecting in 5 seconds...")
             time.sleep(5)
 
+def start_background_tasks():
+    threading.Thread(target=save_and_upload, daemon=True).start()
+    threading.Thread(target=start_ws, daemon=True).start()
+
 if __name__ == "__main__":
-    os.makedirs(LOCAL_SAVE_DIR, exist_ok=True)
-
-    # Start both threads WITHOUT daemon=True
-    threading.Thread(target=save_and_upload).start()
-    threading.Thread(target=start_ws).start()
-
-    # Keep Flask server running to keep service alive on Render
+    start_background_tasks()
     app.run(host="0.0.0.0", port=10000)
